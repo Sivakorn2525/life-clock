@@ -15,12 +15,29 @@
     second: 'เข็มวินาที — หมุนครบ 1 รอบทุกนาที'
   };
 
-  const ZODIAC_EMOJI = ['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐐', '🐵', '🐔', '🐶', '🐷'];
-  const ZODIAC_NAME = ['ชวด (หนู)', 'ฉลู (วัว)', 'ขาล (เสือ)', 'เถาะ (กระต่าย)', 'มะโรง (มังกร)', 'มะเส็ง (งูเล็ก)', 'มะเมีย (ม้า)', 'มะแม (แพะ)', 'วอก (ลิง)', 'ระกา (ไก่)', 'จอ (หมา)', 'กุน (หมู)'];
+  const RASI_RANGES = [
+    { start: [1, 14], name: 'มังกร', symbol: '♑' },
+    { start: [2, 13], name: 'กุมภ์', symbol: '♒' },
+    { start: [3, 14], name: 'มีน', symbol: '♓' },
+    { start: [4, 13], name: 'เมษ', symbol: '♈' },
+    { start: [5, 14], name: 'พฤษภ', symbol: '♉' },
+    { start: [6, 14], name: 'เมถุน', symbol: '♊' },
+    { start: [7, 16], name: 'กรกฎ', symbol: '♋' },
+    { start: [8, 17], name: 'สิงห์', symbol: '♌' },
+    { start: [9, 17], name: 'กันย์', symbol: '♍' },
+    { start: [10, 17], name: 'ตุลย์', symbol: '♎' },
+    { start: [11, 16], name: 'พิจิก', symbol: '♏' },
+    { start: [12, 16], name: 'ธนู', symbol: '♐' }
+  ];
 
-  function getZodiacIndex(birthDate) {
-    const year = birthDate.getFullYear();
-    return ((year - 2020) % 12 + 12) % 12;
+  function getRasi(birthDate) {
+    const val = (birthDate.getMonth() + 1) * 100 + birthDate.getDate();
+    let result = RASI_RANGES[RASI_RANGES.length - 1]; // covers Jan 1-13 (ธนู wraps from December)
+    for (const range of RASI_RANGES) {
+      const threshold = range.start[0] * 100 + range.start[1];
+      if (val >= threshold) result = range;
+    }
+    return result;
   }
 
   // ---------- State ----------
@@ -294,18 +311,18 @@
       });
     });
 
-    // Zodiac animal riding the tip of the second hand
-    const zodiacIdx = getZodiacIndex(birthDate);
-    const zodiacEmoji = ZODIAC_EMOJI[zodiacIdx];
-    const zodiacFontSize = clamp(Math.round(R * 0.16), 14, 20);
+    // ราศี symbol riding the tip of the second hand
+    const rasi = getRasi(birthDate);
+    const rasiFontSize = clamp(Math.round(R * 0.19), 16, 23);
     const secondHand = hands.find((h) => h.key === 'second');
     const zx = cx + Math.cos(secondHand.angle) * secondHand.len;
     const zy = cy + Math.sin(secondHand.angle) * secondHand.len;
-    ctx.font = `${zodiacFontSize}px sans-serif`;
+    ctx.font = `700 ${rasiFontSize}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(zodiacEmoji, zx, zy);
-    lastZodiacPoint = { x: zx, y: zy, r: zodiacFontSize * 0.65, label: `ปีนักษัตร: ${ZODIAC_NAME[zodiacIdx]}` };
+    ctx.fillStyle = coral;
+    ctx.fillText(rasi.symbol, zx, zy);
+    lastZodiacPoint = { x: zx, y: zy, r: rasiFontSize * 0.65, label: `ราศี: ${rasi.name}` };
 
     ctx.beginPath();
     ctx.arc(cx, cy, 5.5, 0, 2 * Math.PI);

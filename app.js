@@ -15,8 +15,16 @@
     second: 'เข็มวินาที — หมุนครบ 1 รอบทุกนาที'
   };
 
+  const ZODIAC_EMOJI = ['🐭', '🐮', '🐯', '🐰', '🐲', '🐍', '🐴', '🐐', '🐵', '🐔', '🐶', '🐷'];
+  const ZODIAC_NAME = ['ชวด (หนู)', 'ฉลู (วัว)', 'ขาล (เสือ)', 'เถาะ (กระต่าย)', 'มะโรง (มังกร)', 'มะเส็ง (งูเล็ก)', 'มะเมีย (ม้า)', 'มะแม (แพะ)', 'วอก (ลิง)', 'ระกา (ไก่)', 'จอ (หมา)', 'กุน (หมู)'];
+
+  function getZodiacIndex(birthDate) {
+    const year = birthDate.getFullYear();
+    return ((year - 2020) % 12 + 12) % 12;
+  }
+
   // ---------- State ----------
-  let state = { birthDate: null, lifespan: 80, goals: [] };
+  let state = { fullName: '', birthDate: null, lifespan: 80, goals: [] };
   let openPanel = null; // 'goals' | 'settings' | null
 
   function loadState() {
@@ -108,6 +116,7 @@
   // Hit-testing registries, refreshed every draw
   let lastHandSegments = [];
   let lastGoalBadges = [];
+  let lastZodiacPoint = null;
 
   function drawGoalBadges(cx, cy, R, life, decimalAge) {
     const parchment = cssVar('--text');
@@ -172,6 +181,7 @@
     ctx.clearRect(0, 0, cssW, cssH);
     lastHandSegments = [];
     lastGoalBadges = [];
+    lastZodiacPoint = null;
     if (!birthDate) return;
 
     const lifespan = state.lifespan;
@@ -270,7 +280,7 @@
       { key: 'month',  angle: monthAngle,  len: R * 0.58, w: 2.8, color: teal,  alpha: 0.95 },
       { key: 'year',   angle: yearAngle,   len: R * 0.46, w: 3.6, color: amber, alpha: 1 },
       { key: 'decade', angle: decadeAngle, len: R * 0.32, w: 5,   color: gold,  alpha: 1 },
-      { key: 'second', angle: secondAngle, len: R * 0.95, w: 1.1, color: rose,  alpha: 1 }
+      { key: 'second', angle: secondAngle, len: R * 0.88, w: 1.1, color: rose,  alpha: 1 }
     ];
 
     hands.forEach((h) => {
@@ -283,6 +293,19 @@
         y2: cy + Math.sin(h.angle) * h.len
       });
     });
+
+    // Zodiac animal riding the tip of the second hand
+    const zodiacIdx = getZodiacIndex(birthDate);
+    const zodiacEmoji = ZODIAC_EMOJI[zodiacIdx];
+    const zodiacFontSize = clamp(Math.round(R * 0.16), 14, 20);
+    const secondHand = hands.find((h) => h.key === 'second');
+    const zx = cx + Math.cos(secondHand.angle) * secondHand.len;
+    const zy = cy + Math.sin(secondHand.angle) * secondHand.len;
+    ctx.font = `${zodiacFontSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(zodiacEmoji, zx, zy);
+    lastZodiacPoint = { x: zx, y: zy, r: zodiacFontSize * 0.65, label: `ปีนักษัตร: ${ZODIAC_NAME[zodiacIdx]}` };
 
     ctx.beginPath();
     ctx.arc(cx, cy, 5.5, 0, 2 * Math.PI);
@@ -316,6 +339,9 @@
     for (const b of lastGoalBadges) {
       if (Math.hypot(x - b.x, y - b.y) <= b.r + 3) return { type: 'goal', data: b };
     }
+    if (lastZodiacPoint && Math.hypot(x - lastZodiacPoint.x, y - lastZodiacPoint.y) <= lastZodiacPoint.r + 4) {
+      return { type: 'zodiac', data: lastZodiacPoint };
+    }
     let best = null, bestDist = 8;
     for (const seg of lastHandSegments) {
       const d = distToSegment(x, y, seg.x1, seg.y1, seg.x2, seg.y2);
@@ -343,6 +369,8 @@
 
     if (hit.type === 'hand') {
       showTooltip(p.x, p.y, hit.data.label);
+    } else if (hit.type === 'zodiac') {
+      showTooltip(p.x, p.y, hit.data.label);
     } else if (hit.type === 'goal') {
       const g = hit.data.goal;
       const yrs = Math.floor(g.age);
@@ -358,6 +386,16 @@
     if (pinned) {
       clearTimeout(tooltipHideTimer);
       tooltipHideTimer = setTimeout(hideTooltip, 2500);
+    }
+  }
+
+  function updateOwnerName() {
+    const el = document.getElementById('ownerName');
+    if (state.fullName && state.fullName.trim()) {
+      el.textContent = `นาฬิกาชีวิตของ ${state.fullName.trim()}`;
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
     }
   }
 
@@ -484,8 +522,10 @@
 
   // ---------- Events ----------
   function initSettingsForm() {
+    const fullNameInput = document.getElementById('fullNameInput');
     const birthInput = document.getElementById('birthDateInput');
     const lifespanInput = document.getElementById('lifespanInput');
+    fullNameInput.value = state.fullName || '';
     if (state.birthDate) birthInput.value = state.birthDate;
     lifespanInput.value = state.lifespan;
 
@@ -494,11 +534,13 @@
       const ls = parseInt(lifespanInput.value, 10);
       if (!bd) { alert('กรุณาเลือกวันเกิดก่อน'); return; }
       if (!ls || ls < 1 || ls > 120) { alert('กรุณาใส่อายุขัยที่คาดว่าระหว่าง 1-120 ปี'); return; }
+      state.fullName = fullNameInput.value.trim();
       state.birthDate = bd;
       state.lifespan = ls;
       saveState();
       render();
       renderGoalList();
+      updateOwnerName();
       const msg = document.getElementById('saveMsg');
       msg.classList.add('show');
       setTimeout(() => msg.classList.remove('show'), 1800);
@@ -554,6 +596,7 @@
     renderGoalList();
     resizeCanvas();
     render();
+    updateOwnerName();
 
     setOpenPanel(state.birthDate ? null : 'settings');
 

@@ -19,6 +19,8 @@
     <p>LIFE CLOCK · เพราะเวลา คือ ชีวิต</p>
   </header>
 
+  <div class="owner-name hidden" id="ownerName"></div>
+
   <div class="dial-frame">
   <div class="dial-card">
     <div class="dial-wrap">
@@ -81,6 +83,10 @@
     <h2>ตั้งค่า</h2>
     <p class="hint">ข้อมูลนี้ถูกเก็บไว้ในเครื่องของคุณเท่านั้น ไม่ถูกส่งออกไปที่ใด</p>
 
+    <div class="field">
+      <label for="fullNameInput">ชื่อ-นามสกุล</label>
+      <input type="text" id="fullNameInput" maxlength="60" placeholder="เช่น สมชาย ใจดี">
+    </div>
     <div class="field">
       <label for="birthDateInput">วันเกิด</label>
       <input type="date" id="birthDateInput">

@@ -36,7 +36,7 @@ html,body{
 body{ min-height: 100vh; display:flex; justify-content:center; padding: 24px 16px 48px; }
 .app{ width:100%; max-width: 440px; }
 
-.app-header{ text-align:center; margin-bottom: 18px; }
+.app-header{ text-align:center; margin-bottom: 4px; }
 
 .app-header h1{
   font-family:'Cormorant Garamond', serif;
@@ -45,6 +45,18 @@ body{ min-height: 100vh; display:flex; justify-content:center; padding: 24px 16p
 }
 
 .app-header p{ margin:0; font-size: 12px; color: var(--text-dim); letter-spacing: 0.02em; }
+
+.owner-name{
+  text-align:center;
+  margin: 10px 0 18px;
+  font-family:'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 16px;
+  color: var(--gold-dim);
+  letter-spacing:0.03em;
+}
+
+.owner-name.hidden{ display:none; }
 
 /* ---------- Dial ---------- */
 

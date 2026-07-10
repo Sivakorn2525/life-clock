@@ -1,4 +1,4 @@
-const CACHE_NAME = 'life-clock-v3';
+const CACHE_NAME = 'life-clock-v5';
 const ASSETS = [
   './',
   './index.html',

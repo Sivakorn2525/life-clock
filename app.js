@@ -3,28 +3,21 @@
 
   const MS_PER_YEAR = 365.2425 * 24 * 3600 * 1000;
   const STORAGE_KEY = 'lifeClockState_v1';
+  const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- State ----------
-  let state = {
-    birthDate: null,   // 'YYYY-MM-DD'
-    lifespan: 80,
-    goals: []          // {id, age: decimalYears, text}
-  };
+  let state = { birthDate: null, lifespan: 80, goals: [] };
 
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        state = Object.assign(state, parsed);
-      }
+      if (raw) state = Object.assign(state, JSON.parse(raw));
     } catch (e) { /* ignore corrupt storage */ }
   }
 
   function saveState() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch (e) { /* storage unavailable, continue in-memory */ }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+    catch (e) { /* storage unavailable, continue in-memory */ }
   }
 
   // ---------- Date math ----------
@@ -38,7 +31,6 @@
     return (now.getTime() - birthDate.getTime()) / MS_PER_YEAR;
   }
 
-  // Calendar-accurate breakdown of the span between two dates (a <= b).
   function diffBreakdown(from, to) {
     const past = to <= from;
     const a = past ? to : from;
@@ -46,15 +38,8 @@
     let y = b.getFullYear() - a.getFullYear();
     let m = b.getMonth() - a.getMonth();
     let d = b.getDate() - a.getDate();
-    if (d < 0) {
-      m -= 1;
-      const prevMonth = new Date(b.getFullYear(), b.getMonth(), 0);
-      d += prevMonth.getDate();
-    }
-    if (m < 0) {
-      y -= 1;
-      m += 12;
-    }
+    if (d < 0) { m -= 1; const prevMonth = new Date(b.getFullYear(), b.getMonth(), 0); d += prevMonth.getDate(); }
+    if (m < 0) { y -= 1; m += 12; }
     return { years: y, months: m, days: d, past };
   }
 
@@ -74,32 +59,36 @@
     return parts.join(' ');
   }
 
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
   // ---------- Canvas dial ----------
   const canvas = document.getElementById('dial');
   const ctx = canvas.getContext('2d');
-  let cssSize = 300;
+  let cssW = 300, cssH = 200;
 
   function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
-    cssSize = Math.round(rect.width);
+    cssW = Math.round(rect.width);
+    cssH = Math.round(rect.height);
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = cssSize * dpr;
-    canvas.height = cssSize * dpr;
+    canvas.width = cssW * dpr;
+    canvas.height = cssH * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-  function angleFor(ageValue, lifespan) {
-    const frac = ageValue / lifespan;
+  function angleFor(value, cycle) {
+    const frac = value / cycle;
     return -Math.PI / 2 + frac * 2 * Math.PI;
   }
 
-  function drawHand(cx, cy, angle, length, width, color, cap) {
+  function drawHand(cx, cy, angle, length, width, color, alpha) {
     ctx.save();
+    ctx.globalAlpha = alpha == null ? 1 : alpha;
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
-    ctx.lineCap = cap || 'round';
+    ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(cx + Math.cos(angle) * length, cy + Math.sin(angle) * length);
@@ -110,37 +99,145 @@
   let highlightGoalId = null;
   let highlightUntil = 0;
 
+  function truncateToWidth(text, maxWidth) {
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let t = text;
+    while (t.length > 1 && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
+    return t + '…';
+  }
+
+  function layoutGoalTags(goals, cx, cy, R, life, decimalAge) {
+    const items = goals.map((g) => {
+      const clampedAge = clamp(g.age, 0, life);
+      const a = angleFor(clampedAge, life);
+      const anchorX = cx + Math.cos(a) * (R + 3);
+      const anchorY = cy + Math.sin(a) * (R + 3);
+      const side = Math.cos(a) >= 0 ? 'right' : 'left';
+      return { goal: g, anchorX, anchorY, side, achieved: decimalAge >= g.age };
+    });
+    const rightItems = items.filter((i) => i.side === 'right').sort((a, b) => a.anchorY - b.anchorY);
+    const leftItems = items.filter((i) => i.side === 'left').sort((a, b) => a.anchorY - b.anchorY);
+    const labelXRight = cx + R + 18;
+    const labelXLeft = cx - R - 18;
+    const minGap = 21;
+    const topBound = 12, bottomBound = cssH - 12;
+
+    function resolveColumn(arr) {
+      let prevY = -Infinity;
+      arr.forEach((item) => {
+        let y = Math.max(item.anchorY, topBound);
+        if (y - prevY < minGap) y = prevY + minGap;
+        item.labelY = y;
+        prevY = y;
+      });
+      if (arr.length && arr[arr.length - 1].labelY > bottomBound) {
+        const shift = arr[arr.length - 1].labelY - bottomBound;
+        arr.forEach((item) => { item.labelY -= shift; });
+      }
+    }
+    resolveColumn(rightItems);
+    resolveColumn(leftItems);
+    rightItems.forEach((i) => { i.labelX = labelXRight; });
+    leftItems.forEach((i) => { i.labelX = labelXLeft; });
+    return [...rightItems, ...leftItems];
+  }
+
+  function drawGoalTags(cx, cy, R, life, decimalAge) {
+    const parchment = cssVar('--text');
+    const textDim = cssVar('--text-dim');
+    const mint = cssVar('--mint');
+    const fontSize = clamp(Math.round(cssW * 0.03), 9, 11.5);
+    ctx.font = `600 ${fontSize}px 'Inter', sans-serif`;
+    const maxTextWidth = Math.max(46, Math.min(96, cssW * 0.22));
+
+    const laid = layoutGoalTags(state.goals, cx, cy, R, life, decimalAge);
+    const pulsing = performance.now() < highlightUntil;
+
+    laid.forEach((item) => {
+      const isHi = pulsing && item.goal.id === highlightGoalId;
+      const dotColor = item.achieved ? textDim : mint;
+
+      // leader line
+      ctx.save();
+      ctx.strokeStyle = dotColor;
+      ctx.globalAlpha = isHi ? 0.9 : 0.5;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(item.anchorX, item.anchorY);
+      ctx.lineTo(item.labelX, item.labelY);
+      ctx.stroke();
+      ctx.restore();
+
+      // anchor dot on the ring
+      ctx.beginPath();
+      ctx.arc(item.anchorX, item.anchorY, isHi ? 4 : 2.8, 0, 2 * Math.PI);
+      ctx.fillStyle = dotColor;
+      ctx.fill();
+
+      // tag text
+      const yrs = Math.floor(item.goal.age);
+      const label = truncateToWidth(`${yrs}: ${item.goal.text}`, maxTextWidth);
+      const textW = ctx.measureText(label).width;
+      const tagW = textW + 14;
+      const tagH = fontSize + 9;
+      const tagX = item.side === 'right' ? item.labelX : item.labelX - tagW;
+      const tagY = item.labelY - tagH / 2;
+
+      ctx.save();
+      ctx.globalAlpha = isHi ? 1 : (item.achieved ? 0.55 : 0.88);
+      ctx.fillStyle = 'rgba(13,17,40,0.72)';
+      ctx.strokeStyle = dotColor;
+      ctx.lineWidth = isHi ? 1.4 : 1;
+      const r = 5;
+      ctx.beginPath();
+      ctx.moveTo(tagX + r, tagY);
+      ctx.arcTo(tagX + tagW, tagY, tagX + tagW, tagY + tagH, r);
+      ctx.arcTo(tagX + tagW, tagY + tagH, tagX, tagY + tagH, r);
+      ctx.arcTo(tagX, tagY + tagH, tagX, tagY, r);
+      ctx.arcTo(tagX, tagY, tagX + tagW, tagY, r);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = item.achieved ? textDim : parchment;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, tagX + 7, item.labelY + 0.5);
+      ctx.restore();
+    });
+  }
+
   function drawDial(now) {
     const birthDate = parseBirthDate();
-    const size = cssSize;
-    const cx = size / 2;
-    const cy = size / 2;
-    const R = size / 2 - 30;
+    const cx = cssW / 2;
+    const cy = cssH / 2;
+    const R = cssH / 2 - 38;
 
-    ctx.clearRect(0, 0, size, size);
+    ctx.clearRect(0, 0, cssW, cssH);
     if (!birthDate) return;
 
     const lifespan = state.lifespan;
     const rawAge = getDecimalAge(birthDate, now);
-    const decimalAge = Math.max(0, Math.min(rawAge, lifespan));
+    const decimalAge = clamp(rawAge, 0, lifespan);
     const lived = decimalAge / lifespan;
 
-    const parchment = cssVar('--parchment');
-    const parchmentDim = cssVar('--parchment-dim');
-    const brass = cssVar('--brass');
-    const brassBright = cssVar('--brass-bright');
-    const brassDim = cssVar('--brass-dim');
-    const sage = cssVar('--sage');
-    const sageBright = cssVar('--sage-bright');
-    const line = cssVar('--line');
+    const parchment = cssVar('--text');
+    const gold = cssVar('--gold');
+    const goldDim = cssVar('--gold-dim');
+    const amber = cssVar('--amber');
+    const teal = cssVar('--teal');
+    const coral = cssVar('--coral');
+    const sky = cssVar('--sky');
+    const lemon = cssVar('--lemon');
+    const rose = cssVar('--rose');
 
-    // Lived-fraction ring (subtle progress annulus)
+    // Lived vs remaining ring — both vivid, no "used up / dead" grey
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + lived * 2 * Math.PI);
-    ctx.strokeStyle = brass;
-    ctx.globalAlpha = 0.16;
-    ctx.lineWidth = 10;
+    ctx.strokeStyle = gold;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 9;
     ctx.lineCap = 'butt';
     ctx.stroke();
     ctx.restore();
@@ -148,9 +245,9 @@
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, R, -Math.PI / 2 + lived * 2 * Math.PI, -Math.PI / 2 + 2 * Math.PI);
-    ctx.strokeStyle = line;
-    ctx.globalAlpha = 0.35;
-    ctx.lineWidth = 10;
+    ctx.strokeStyle = teal;
+    ctx.globalAlpha = 0.28;
+    ctx.lineWidth = 9;
     ctx.lineCap = 'butt';
     ctx.stroke();
     ctx.restore();
@@ -158,11 +255,11 @@
     // Outer ring
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, 2 * Math.PI);
-    ctx.strokeStyle = line;
+    ctx.strokeStyle = cssVar('--line');
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Ticks + numbers
+    // Ticks + decade numbers
     const life = Math.round(lifespan);
     for (let i = 0; i <= life; i++) {
       const isMajor = (i % 10 === 0) || (i === life);
@@ -172,15 +269,15 @@
       ctx.beginPath();
       ctx.moveTo(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer);
       ctx.lineTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
-      ctx.strokeStyle = isMajor ? brass : brassDim;
-      ctx.globalAlpha = isMajor ? 0.9 : 0.45;
+      ctx.strokeStyle = isMajor ? gold : goldDim;
+      ctx.globalAlpha = isMajor ? 0.95 : 0.5;
       ctx.lineWidth = isMajor ? 2 : 1;
       ctx.stroke();
       ctx.globalAlpha = 1;
 
       if (isMajor) {
-        const labelR = R - 27;
-        ctx.font = "600 14px 'Cormorant Garamond', serif";
+        const labelR = R - 26;
+        ctx.font = "600 13px 'Cormorant Garamond', serif";
         ctx.fillStyle = parchment;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -188,55 +285,43 @@
       }
     }
 
-    // Goal markers
-    const now_pulse = (performance.now() < highlightUntil);
-    state.goals.forEach((g) => {
-      const clampedAge = Math.max(0, Math.min(g.age, life));
-      const a = angleFor(clampedAge, life);
-      const achieved = decimalAge >= g.age;
-      const isHighlighted = now_pulse && g.id === highlightGoalId;
-      const markerR = R + 9 + (isHighlighted ? 4 : 0);
-      const px = cx + Math.cos(a) * markerR;
-      const py = cy + Math.sin(a) * markerR;
+    drawGoalTags(cx, cy, R, life, decimalAge);
 
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
-      ctx.lineTo(cx + Math.cos(a) * (R + 6), cy + Math.sin(a) * (R + 6));
-      ctx.strokeStyle = achieved ? parchmentDim : sage;
-      ctx.globalAlpha = 0.6;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      ctx.beginPath();
-      ctx.arc(px, py, isHighlighted ? 5.5 : 3.5, 0, 2 * Math.PI);
-      if (achieved) {
-        ctx.fillStyle = parchmentDim;
-        ctx.fill();
-      } else {
-        ctx.fillStyle = isHighlighted ? sageBright : sage;
-        ctx.fill();
-      }
-    });
-
-    // Hands: decade (short/thick), year (medium), month (long/thin)
+    // ---- Hands: decade -> year -> month -> day -> hour(24h) -> minute -> second ----
     const decadeAngle = angleFor(decimalAge, life);
     const yearCyclePos = ((decimalAge % 10) + 10) % 10;
-    const yearAngle = -Math.PI / 2 + (yearCyclePos / 10) * 2 * Math.PI;
+    const yearAngle = angleFor(yearCyclePos, 10);
     const monthCyclePos = ((decimalAge % 1) + 1) % 1;
-    const monthAngle = -Math.PI / 2 + monthCyclePos * 2 * Math.PI;
+    const monthAngle = angleFor(monthCyclePos, 1);
 
-    drawHand(cx, cy, yearAngle, R * 0.74, 2.5, parchment);
-    drawHand(cx, cy, monthAngle, R * 0.90, 1.3, sageBright);
-    drawHand(cx, cy, decadeAngle, R * 0.5, 5, brassBright);
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const dayFrac = (now.getDate() - 1 + (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86400) / daysInMonth;
+    const dayAngle = angleFor(dayFrac, 1);
+
+    const hourFrac = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000) / 86400;
+    const hourAngle = angleFor(hourFrac, 1);
+
+    const minuteFrac = (now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000) / 3600;
+    const minuteAngle = angleFor(minuteFrac, 1);
+
+    const secondFrac = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
+    const secondAngle = angleFor(secondFrac, 1);
+
+    drawHand(cx, cy, minuteAngle, R * 0.88, 1.3, lemon, 0.75);
+    drawHand(cx, cy, hourAngle, R * 0.80, 1.6, sky, 0.8);
+    drawHand(cx, cy, dayAngle, R * 0.70, 2, coral, 0.85);
+    drawHand(cx, cy, monthAngle, R * 0.58, 2.8, teal, 0.95);
+    drawHand(cx, cy, yearAngle, R * 0.46, 3.6, amber, 1);
+    drawHand(cx, cy, decadeAngle, R * 0.32, 5, gold, 1);
+    drawHand(cx, cy, secondAngle, R * 0.95, 1.1, rose, 1);
 
     ctx.beginPath();
-    ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
-    ctx.fillStyle = brassBright;
+    ctx.arc(cx, cy, 5.5, 0, 2 * Math.PI);
+    ctx.fillStyle = gold;
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
-    ctx.strokeStyle = cssVar('--bg');
+    ctx.arc(cx, cy, 5.5, 0, 2 * Math.PI);
+    ctx.strokeStyle = cssVar('--bg-1');
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
@@ -271,7 +356,7 @@
     remEl.textContent = `${fmtBreakdown(remB)} (จนถึงอายุ ${state.lifespan})`;
 
     const decimalAge = getDecimalAge(birthDate, now);
-    const pct = Math.max(0, Math.min(100, (decimalAge / state.lifespan) * 100));
+    const pct = clamp((decimalAge / state.lifespan) * 100, 0, 100);
     pctEl.textContent = `${pct.toFixed(1)}%`;
   }
 
@@ -304,12 +389,10 @@
 
       let statusText = '';
       if (birthDate) {
-        if (achieved) {
-          statusText = 'ผ่านมาแล้ว';
-        } else {
+        if (achieved) statusText = 'ผ่านมาแล้ว';
+        else {
           const targetDate = addYearsMonths(birthDate, yrs, mos);
-          const b = diffBreakdown(now, targetDate);
-          statusText = `อีก ${fmtBreakdown(b)}`;
+          statusText = `อีก ${fmtBreakdown(diffBreakdown(now, targetDate))}`;
         }
       }
 
@@ -328,9 +411,21 @@
   }
 
   // ---------- Render loop ----------
+  let lastDrawTime = 0;
+  const FRAME_INTERVAL = reducedMotion ? 1000 : 120;
+
+  function frame(ts) {
+    if (ts - lastDrawTime >= FRAME_INTERVAL) {
+      lastDrawTime = ts;
+      const now = new Date();
+      drawDial(now);
+      updateReadout(now);
+    }
+    requestAnimationFrame(frame);
+  }
+
   function render() {
     const now = new Date();
-    resizeCanvas();
     drawDial(now);
     updateReadout(now);
   }
@@ -369,7 +464,7 @@
       state.goals.push({ id: 'g' + Date.now(), age, text });
       saveState();
       renderGoalList();
-      drawDial(new Date());
+      render();
       e.target.reset();
     });
 
@@ -379,14 +474,14 @@
         state.goals = state.goals.filter((g) => g.id !== id);
         saveState();
         renderGoalList();
-        drawDial(new Date());
+        render();
         return;
       }
       const item = e.target.closest('.goal-item');
       if (item) {
         highlightGoalId = item.dataset.id;
         highlightUntil = performance.now() + 1600;
-        drawDial(new Date());
+        render();
       }
     });
   }
@@ -409,15 +504,15 @@
     initSettingsForm();
     initGoalForm();
     renderGoalList();
+    resizeCanvas();
     render();
 
-    // Open settings by default on first run
     if (!state.birthDate) {
       document.querySelector('.tab-btn[data-tab="settings"]').click();
     }
 
-    window.addEventListener('resize', render);
-    setInterval(render, 1000);
+    window.addEventListener('resize', () => { resizeCanvas(); render(); });
+    requestAnimationFrame(frame);
   }
 
   document.addEventListener('DOMContentLoaded', init);

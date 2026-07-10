@@ -5,8 +5,19 @@
   const STORAGE_KEY = 'lifeClockState_v1';
   const reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  const HAND_INFO = {
+    decade: 'เข็มทศวรรษ — หมุนครบ 1 รอบตลอดช่วงชีวิตที่คาดไว้',
+    year:   'เข็มปี — หมุนครบ 1 รอบทุก 10 ปี',
+    month:  'เข็มเดือน — หมุนครบ 1 รอบทุกปี',
+    day:    'เข็มวัน — หมุนครบ 1 รอบทุกเดือน',
+    hour:   'เข็มชั่วโมง — หมุนครบ 1 รอบทุกวัน (24 ชม.)',
+    minute: 'เข็มนาที — หมุนครบ 1 รอบทุกชั่วโมง',
+    second: 'เข็มวินาที — หมุนครบ 1 รอบทุกนาที'
+  };
+
   // ---------- State ----------
   let state = { birthDate: null, lifespan: 80, goals: [] };
+  let openPanel = null; // 'goals' | 'settings' | null
 
   function loadState() {
     try {
@@ -27,9 +38,7 @@
     return new Date(y, m - 1, d);
   }
 
-  function getDecimalAge(birthDate, now) {
-    return (now.getTime() - birthDate.getTime()) / MS_PER_YEAR;
-  }
+  function getDecimalAge(birthDate, now) { return (now.getTime() - birthDate.getTime()) / MS_PER_YEAR; }
 
   function diffBreakdown(from, to) {
     const past = to <= from;
@@ -64,7 +73,8 @@
   // ---------- Canvas dial ----------
   const canvas = document.getElementById('dial');
   const ctx = canvas.getContext('2d');
-  let cssW = 300, cssH = 200;
+  const tooltipEl = document.getElementById('dialTooltip');
+  let cssW = 300, cssH = 300;
 
   function resizeCanvas() {
     const rect = canvas.parentElement.getBoundingClientRect();
@@ -77,11 +87,7 @@
   }
 
   const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-  function angleFor(value, cycle) {
-    const frac = value / cycle;
-    return -Math.PI / 2 + frac * 2 * Math.PI;
-  }
+  function angleFor(value, cycle) { return -Math.PI / 2 + (value / cycle) * 2 * Math.PI; }
 
   function drawHand(cx, cy, angle, length, width, color, alpha) {
     ctx.save();
@@ -99,111 +105,61 @@
   let highlightGoalId = null;
   let highlightUntil = 0;
 
-  function truncateToWidth(text, maxWidth) {
-    if (ctx.measureText(text).width <= maxWidth) return text;
-    let t = text;
-    while (t.length > 1 && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
-    return t + '…';
-  }
+  // Hit-testing registries, refreshed every draw
+  let lastHandSegments = [];
+  let lastGoalBadges = [];
 
-  function layoutGoalTags(goals, cx, cy, R, life, decimalAge) {
-    const items = goals.map((g) => {
-      const clampedAge = clamp(g.age, 0, life);
-      const a = angleFor(clampedAge, life);
-      const anchorX = cx + Math.cos(a) * (R + 3);
-      const anchorY = cy + Math.sin(a) * (R + 3);
-      const side = Math.cos(a) >= 0 ? 'right' : 'left';
-      return { goal: g, anchorX, anchorY, side, achieved: decimalAge >= g.age };
-    });
-    const rightItems = items.filter((i) => i.side === 'right').sort((a, b) => a.anchorY - b.anchorY);
-    const leftItems = items.filter((i) => i.side === 'left').sort((a, b) => a.anchorY - b.anchorY);
-    const labelXRight = cx + R + 18;
-    const labelXLeft = cx - R - 18;
-    const minGap = 21;
-    const topBound = 12, bottomBound = cssH - 12;
-
-    function resolveColumn(arr) {
-      let prevY = -Infinity;
-      arr.forEach((item) => {
-        let y = Math.max(item.anchorY, topBound);
-        if (y - prevY < minGap) y = prevY + minGap;
-        item.labelY = y;
-        prevY = y;
-      });
-      if (arr.length && arr[arr.length - 1].labelY > bottomBound) {
-        const shift = arr[arr.length - 1].labelY - bottomBound;
-        arr.forEach((item) => { item.labelY -= shift; });
-      }
-    }
-    resolveColumn(rightItems);
-    resolveColumn(leftItems);
-    rightItems.forEach((i) => { i.labelX = labelXRight; });
-    leftItems.forEach((i) => { i.labelX = labelXLeft; });
-    return [...rightItems, ...leftItems];
-  }
-
-  function drawGoalTags(cx, cy, R, life, decimalAge) {
+  function drawGoalBadges(cx, cy, R, life, decimalAge) {
     const parchment = cssVar('--text');
     const textDim = cssVar('--text-dim');
     const mint = cssVar('--mint');
-    const fontSize = clamp(Math.round(cssW * 0.03), 9, 11.5);
-    ctx.font = `600 ${fontSize}px 'Inter', sans-serif`;
-    const maxTextWidth = Math.max(46, Math.min(96, cssW * 0.22));
+    lastGoalBadges = [];
+    if (state.goals.length === 0) return;
 
-    const laid = layoutGoalTags(state.goals, cx, cy, R, life, decimalAge);
+    const sorted = [...state.goals].sort((a, b) => a.age - b.age);
+    const gapThresholdAge = (10 / 360) * life;
+    let lastAge = -Infinity;
+    let toggle = false;
     const pulsing = performance.now() < highlightUntil;
 
-    laid.forEach((item) => {
-      const isHi = pulsing && item.goal.id === highlightGoalId;
-      const dotColor = item.achieved ? textDim : mint;
+    sorted.forEach((g) => {
+      if (g.age - lastAge < gapThresholdAge) toggle = !toggle; else toggle = false;
+      lastAge = g.age;
+      const radius = toggle ? R + 19 : R + 10;
+      const clampedAge = clamp(g.age, 0, life);
+      const a = angleFor(clampedAge, life);
+      const x = cx + Math.cos(a) * radius;
+      const y = cy + Math.sin(a) * radius;
+      const achieved = decimalAge >= g.age;
+      const isHi = pulsing && g.id === highlightGoalId;
+      const badgeR = isHi ? 10.5 : 8.5;
 
-      // leader line
-      ctx.save();
-      ctx.strokeStyle = dotColor;
-      ctx.globalAlpha = isHi ? 0.9 : 0.5;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = achieved ? textDim : mint;
+      ctx.globalAlpha = 0.5;
       ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(item.anchorX, item.anchorY);
-      ctx.lineTo(item.labelX, item.labelY);
       ctx.stroke();
-      ctx.restore();
+      ctx.globalAlpha = 1;
 
-      // anchor dot on the ring
       ctx.beginPath();
-      ctx.arc(item.anchorX, item.anchorY, isHi ? 4 : 2.8, 0, 2 * Math.PI);
-      ctx.fillStyle = dotColor;
+      ctx.arc(x, y, badgeR, 0, 2 * Math.PI);
+      ctx.fillStyle = achieved ? textDim : mint;
       ctx.fill();
+      if (isHi) {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = parchment;
+        ctx.stroke();
+      }
 
-      // tag text
-      const yrs = Math.floor(item.goal.age);
-      const label = truncateToWidth(`${yrs}: ${item.goal.text}`, maxTextWidth);
-      const textW = ctx.measureText(label).width;
-      const tagW = textW + 14;
-      const tagH = fontSize + 9;
-      const tagX = item.side === 'right' ? item.labelX : item.labelX - tagW;
-      const tagY = item.labelY - tagH / 2;
-
-      ctx.save();
-      ctx.globalAlpha = isHi ? 1 : (item.achieved ? 0.55 : 0.88);
-      ctx.fillStyle = 'rgba(13,17,40,0.72)';
-      ctx.strokeStyle = dotColor;
-      ctx.lineWidth = isHi ? 1.4 : 1;
-      const r = 5;
-      ctx.beginPath();
-      ctx.moveTo(tagX + r, tagY);
-      ctx.arcTo(tagX + tagW, tagY, tagX + tagW, tagY + tagH, r);
-      ctx.arcTo(tagX + tagW, tagY + tagH, tagX, tagY + tagH, r);
-      ctx.arcTo(tagX, tagY + tagH, tagX, tagY, r);
-      ctx.arcTo(tagX, tagY, tagX + tagW, tagY, r);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = item.achieved ? textDim : parchment;
-      ctx.textAlign = 'left';
+      ctx.fillStyle = '#0d1128';
+      ctx.font = "700 9.5px 'Inter', sans-serif";
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(label, tagX + 7, item.labelY + 0.5);
-      ctx.restore();
+      ctx.fillText(String(Math.floor(g.age)), x, y + 0.5);
+
+      lastGoalBadges.push({ goal: g, x, y, r: badgeR, achieved });
     });
   }
 
@@ -211,9 +167,11 @@
     const birthDate = parseBirthDate();
     const cx = cssW / 2;
     const cy = cssH / 2;
-    const R = cssH / 2 - 38;
+    const R = Math.min(cssW, cssH) / 2 - 34;
 
     ctx.clearRect(0, 0, cssW, cssH);
+    lastHandSegments = [];
+    lastGoalBadges = [];
     if (!birthDate) return;
 
     const lifespan = state.lifespan;
@@ -231,7 +189,7 @@
     const lemon = cssVar('--lemon');
     const rose = cssVar('--rose');
 
-    // Lived vs remaining ring — both vivid, no "used up / dead" grey
+    // Lived vs remaining ring — both vivid
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + lived * 2 * Math.PI);
@@ -252,14 +210,12 @@
     ctx.stroke();
     ctx.restore();
 
-    // Outer ring
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, 2 * Math.PI);
     ctx.strokeStyle = cssVar('--line');
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Ticks + decade numbers
     const life = Math.round(lifespan);
     for (let i = 0; i <= life; i++) {
       const isMajor = (i % 10 === 0) || (i === life);
@@ -285,7 +241,7 @@
       }
     }
 
-    drawGoalTags(cx, cy, R, life, decimalAge);
+    drawGoalBadges(cx, cy, R, life, decimalAge);
 
     // ---- Hands: decade -> year -> month -> day -> hour(24h) -> minute -> second ----
     const decadeAngle = angleFor(decimalAge, life);
@@ -307,13 +263,26 @@
     const secondFrac = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
     const secondAngle = angleFor(secondFrac, 1);
 
-    drawHand(cx, cy, minuteAngle, R * 0.88, 1.3, lemon, 0.75);
-    drawHand(cx, cy, hourAngle, R * 0.80, 1.6, sky, 0.8);
-    drawHand(cx, cy, dayAngle, R * 0.70, 2, coral, 0.85);
-    drawHand(cx, cy, monthAngle, R * 0.58, 2.8, teal, 0.95);
-    drawHand(cx, cy, yearAngle, R * 0.46, 3.6, amber, 1);
-    drawHand(cx, cy, decadeAngle, R * 0.32, 5, gold, 1);
-    drawHand(cx, cy, secondAngle, R * 0.95, 1.1, rose, 1);
+    const hands = [
+      { key: 'minute', angle: minuteAngle, len: R * 0.88, w: 1.3, color: lemon, alpha: 0.75 },
+      { key: 'hour',   angle: hourAngle,   len: R * 0.80, w: 1.6, color: sky,   alpha: 0.8 },
+      { key: 'day',    angle: dayAngle,    len: R * 0.70, w: 2,   color: coral, alpha: 0.85 },
+      { key: 'month',  angle: monthAngle,  len: R * 0.58, w: 2.8, color: teal,  alpha: 0.95 },
+      { key: 'year',   angle: yearAngle,   len: R * 0.46, w: 3.6, color: amber, alpha: 1 },
+      { key: 'decade', angle: decadeAngle, len: R * 0.32, w: 5,   color: gold,  alpha: 1 },
+      { key: 'second', angle: secondAngle, len: R * 0.95, w: 1.1, color: rose,  alpha: 1 }
+    ];
+
+    hands.forEach((h) => {
+      drawHand(cx, cy, h.angle, h.len, h.w, h.color, h.alpha);
+      lastHandSegments.push({
+        key: h.key,
+        label: HAND_INFO[h.key],
+        x1: cx, y1: cy,
+        x2: cx + Math.cos(h.angle) * h.len,
+        y2: cy + Math.sin(h.angle) * h.len
+      });
+    });
 
     ctx.beginPath();
     ctx.arc(cx, cy, 5.5, 0, 2 * Math.PI);
@@ -324,6 +293,72 @@
     ctx.strokeStyle = cssVar('--bg-1');
     ctx.lineWidth = 1.5;
     ctx.stroke();
+  }
+
+  // ---------- Hover / tap tooltips ----------
+  function distToSegment(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq === 0 ? 0 : ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = clamp(t, 0, 1);
+    const projX = x1 + t * dx, projY = y1 + t * dy;
+    return Math.hypot(px - projX, py - projY);
+  }
+
+  function getCanvasPoint(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = evt.touches && evt.touches.length ? evt.touches[0].clientX : evt.clientX;
+    const clientY = evt.touches && evt.touches.length ? evt.touches[0].clientY : evt.clientY;
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function hitTest(x, y) {
+    for (const b of lastGoalBadges) {
+      if (Math.hypot(x - b.x, y - b.y) <= b.r + 3) return { type: 'goal', data: b };
+    }
+    let best = null, bestDist = 8;
+    for (const seg of lastHandSegments) {
+      const d = distToSegment(x, y, seg.x1, seg.y1, seg.x2, seg.y2);
+      if (d < bestDist) { bestDist = d; best = seg; }
+    }
+    if (best) return { type: 'hand', data: best };
+    return null;
+  }
+
+  function showTooltip(x, y, text) {
+    tooltipEl.textContent = text;
+    tooltipEl.style.left = x + 'px';
+    tooltipEl.style.top = y + 'px';
+    tooltipEl.classList.add('show');
+  }
+
+  function hideTooltip() { tooltipEl.classList.remove('show'); }
+
+  let tooltipHideTimer = null;
+
+  function onDialInteract(evt, pinned) {
+    const p = getCanvasPoint(evt);
+    const hit = hitTest(p.x, p.y);
+    if (!hit) { if (!pinned) hideTooltip(); return; }
+
+    if (hit.type === 'hand') {
+      showTooltip(p.x, p.y, hit.data.label);
+    } else if (hit.type === 'goal') {
+      const g = hit.data.goal;
+      const yrs = Math.floor(g.age);
+      const mos = Math.round((g.age - yrs) * 12);
+      showTooltip(p.x, p.y, `อายุ ${yrs} ปี${mos ? ' ' + mos + ' เดือน' : ''}: ${g.text}`);
+      if (pinned) {
+        highlightGoalId = g.id;
+        highlightUntil = performance.now() + 1600;
+        drawDial(new Date());
+      }
+    }
+
+    if (pinned) {
+      clearTimeout(tooltipHideTimer);
+      tooltipHideTimer = setTimeout(hideTooltip, 2500);
+    }
   }
 
   // ---------- Readout ----------
@@ -430,6 +465,23 @@
     updateReadout(now);
   }
 
+  // ---------- Accordion tabs ----------
+  function setOpenPanel(name) {
+    openPanel = name;
+    document.getElementById('panel-goals').classList.toggle('hidden', openPanel !== 'goals');
+    document.getElementById('panel-settings').classList.toggle('hidden', openPanel !== 'settings');
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === openPanel));
+  }
+
+  function initTabs() {
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        setOpenPanel(openPanel === tab ? null : tab);
+      });
+    });
+  }
+
   // ---------- Events ----------
   function initSettingsForm() {
     const birthInput = document.getElementById('birthDateInput');
@@ -486,16 +538,11 @@
     });
   }
 
-  function initTabs() {
-    const buttons = document.querySelectorAll('.tab-btn');
-    buttons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        buttons.forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById('panel-goals').classList.toggle('hidden', btn.dataset.tab !== 'goals');
-        document.getElementById('panel-settings').classList.toggle('hidden', btn.dataset.tab !== 'settings');
-      });
-    });
+  function initDialInteraction() {
+    canvas.addEventListener('mousemove', (e) => onDialInteract(e, false));
+    canvas.addEventListener('mouseleave', hideTooltip);
+    canvas.addEventListener('click', (e) => onDialInteract(e, true));
+    canvas.addEventListener('touchstart', (e) => onDialInteract(e, true), { passive: true });
   }
 
   function init() {
@@ -503,13 +550,12 @@
     initTabs();
     initSettingsForm();
     initGoalForm();
+    initDialInteraction();
     renderGoalList();
     resizeCanvas();
     render();
 
-    if (!state.birthDate) {
-      document.querySelector('.tab-btn[data-tab="settings"]').click();
-    }
+    setOpenPanel(state.birthDate ? null : 'settings');
 
     window.addEventListener('resize', () => { resizeCanvas(); render(); });
     requestAnimationFrame(frame);

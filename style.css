@@ -25,8 +25,7 @@
 *{ box-sizing: border-box; }
 
 html,body{
-  margin:0;
-  padding:0;
+  margin:0; padding:0;
   background: linear-gradient(165deg, var(--bg-1), var(--bg-2) 70%);
   background-attachment: fixed;
   color: var(--text);
@@ -34,74 +33,70 @@ html,body{
   -webkit-font-smoothing: antialiased;
 }
 
-body{
-  min-height: 100vh;
-  display:flex;
-  justify-content:center;
-  padding: 24px 16px 48px;
-}
-
+body{ min-height: 100vh; display:flex; justify-content:center; padding: 24px 16px 48px; }
 .app{ width:100%; max-width: 440px; }
 
 .app-header{ text-align:center; margin-bottom: 18px; }
 
 .app-header h1{
   font-family:'Cormorant Garamond', serif;
-  font-weight:700;
-  font-size: 30px;
-  letter-spacing: 0.02em;
-  margin: 0 0 4px;
-  background: linear-gradient(120deg, var(--gold), var(--coral));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-weight:700; font-size: 30px; letter-spacing: 0.02em; margin: 0 0 4px;
+  background: linear-gradient(120deg, var(--gold), var(--coral), var(--teal));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
-.app-header p{
-  margin:0;
-  font-size: 12px;
-  color: var(--text-dim);
-  letter-spacing: 0.02em;
-}
+.app-header p{ margin:0; font-size: 12px; color: var(--text-dim); letter-spacing: 0.02em; }
 
 /* ---------- Dial ---------- */
 
-.dial-card{
-  background:
-    radial-gradient(circle at 50% 32%, rgba(255,206,84,0.14), transparent 55%),
-    radial-gradient(circle at 50% 68%, rgba(62,207,192,0.10), transparent 60%),
-    var(--panel);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  padding: 20px 10px 18px;
+.dial-frame{
+  padding: 2px;
+  border-radius: calc(var(--radius) + 2px);
+  background: linear-gradient(135deg, var(--gold), var(--coral), var(--sky), var(--teal));
   margin-bottom: 16px;
 }
 
-.dial-wrap{
-  position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 2;
-  margin: 0 auto;
+.dial-card{
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255,206,84,0.24), transparent 55%),
+    radial-gradient(circle at 50% 72%, rgba(62,207,192,0.18), transparent 60%),
+    radial-gradient(circle at 15% 85%, rgba(255,122,160,0.14), transparent 55%),
+    var(--panel);
+  border-radius: var(--radius);
+  padding: 20px 14px 18px;
 }
 
+.dial-wrap{ position: relative; width: 100%; aspect-ratio: 1 / 1; margin: 0 auto; }
 #dial{ width:100%; height:100%; display:block; }
 
-.empty-state{
+.dial-tooltip{
   position:absolute;
-  inset:0;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
+  pointer-events:none;
+  background: rgba(10,14,34,0.95);
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  white-space: normal;
   text-align:center;
-  gap:12px;
-  padding: 24px;
+  max-width: 190px;
+  transform: translate(-50%, -125%);
+  opacity: 0;
+  transition: opacity .12s ease;
+  z-index: 5;
+}
+
+.dial-tooltip.show{ opacity: 1; }
+
+.empty-state{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; text-align:center; gap:12px; padding: 24px;
 }
 
 .empty-state.hidden{ display:none; }
-
 .empty-state p{ margin:0; color: var(--text-dim); font-size: 13.5px; line-height:1.6; }
-
 .empty-state .ring{ width:56px;height:56px;border-radius:50%; border: 1.5px dashed var(--gold-dim); }
 
 .readout{ margin-top: 14px; text-align:center; font-family:'IBM Plex Mono', monospace; }
@@ -112,13 +107,13 @@ body{
 }
 
 .readout .row:first-child{ border-top:none; }
-
 .readout .row .label{ font-size: 11px; letter-spacing: 0.06em; color: var(--text-dim); text-transform: uppercase; }
 .readout .row .value{ font-size: 14.5px; color: var(--text); }
+#ageValue{ color: var(--coral); }
 .readout .row.remaining .value{ color: var(--gold); font-size: 16px; font-weight: 500; }
 .readout .row.pct .value{ color: var(--teal); }
 
-/* ---------- Tabs ---------- */
+/* ---------- Tabs (accordion toggles) ---------- */
 
 .tabs{
   display:flex; gap: 6px; margin-bottom: 12px;
@@ -127,19 +122,32 @@ body{
 }
 
 .tab-btn{
-  flex:1; padding: 9px 8px; background: transparent; border: none; border-radius: 6px;
-  color: var(--text-dim); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500;
+  flex:1; padding: 10px 8px; background: transparent; border: none; border-radius: 6px;
+  color: var(--text-dim); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
   cursor:pointer; transition: background .15s ease, color .15s ease;
 }
 
 .tab-btn:hover{ color: var(--text); }
-.tab-btn.active{ background: var(--panel-2); color: var(--gold); }
+
+.tab-btn.active{
+  background: linear-gradient(135deg, rgba(255,206,84,0.20), rgba(255,122,160,0.14));
+  color: var(--gold);
+}
+
 .tab-btn:focus-visible, button:focus-visible, input:focus-visible{ outline: 1.5px solid var(--gold); outline-offset: 2px; }
 
 /* ---------- Panels ---------- */
 
-.panel{ background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 18px 16px; }
+.panel{
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius);
+  padding: 18px 16px;
+  animation: panelIn .18s ease;
+}
+
 .panel.hidden{ display:none; }
+
+@keyframes panelIn{ from{ opacity:0; transform: translateY(-4px);} to{ opacity:1; transform:none; } }
+
 .panel h2{ font-family:'Cormorant Garamond', serif; font-size: 19px; font-weight:600; margin: 0 0 4px; color: var(--text); }
 .panel .hint{ margin: 0 0 14px; font-size: 12px; color: var(--text-dim); line-height:1.5; }
 
@@ -176,12 +184,13 @@ input::placeholder{ color: var(--text-dim); opacity:0.7; }
 
 .goal-item{
   display:flex; align-items:flex-start; gap:10px; background: var(--panel-2);
-  border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 10px 10px;
+  border: 1px solid var(--line-soft); border-left: 3px solid var(--mint);
+  border-radius: var(--radius-sm); padding: 10px 10px;
   cursor:pointer; transition: border-color .15s ease;
 }
 
-.goal-item:hover{ border-color: var(--gold-dim); }
-.goal-item.achieved{ opacity: 0.55; }
+.goal-item:hover{ border-color: var(--gold-dim); border-left-color: var(--mint); }
+.goal-item.achieved{ opacity: 0.55; border-left-color: var(--text-dim); }
 
 .goal-marker-dot{ width:8px;height:8px;border-radius:50%; margin-top:5px; flex-shrink:0; background: var(--mint); }
 .goal-item.achieved .goal-marker-dot{ background: var(--text-dim); }

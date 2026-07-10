@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>นาฬิกาชีวิต — Life Clock</title>
 <meta name="description" content="นาฬิกาชีวิตแบบอะนาล็อก-ดิจิทัล นับถอยหลังสู่อายุขัยและเป้าหมายในชีวิตของคุณ">
-<meta name="theme-color" content="#17150f">
+<meta name="theme-color" content="#0d1128">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
@@ -16,12 +16,14 @@
 
   <header class="app-header">
     <h1>นาฬิกาชีวิต</h1>
-    <p>LIFE CLOCK · 7 เข็มซ้อนกัน ตั้งแต่ทศวรรษลงไปถึงวินาที</p>
+    <p>LIFE CLOCK · เพราะเวลา คือ ชีวิต</p>
   </header>
 
+  <div class="dial-frame">
   <div class="dial-card">
     <div class="dial-wrap">
       <canvas id="dial" aria-label="นาฬิกาชีวิต แสดงอายุปัจจุบันและเวลาที่เหลือ"></canvas>
+      <div class="dial-tooltip" id="dialTooltip"></div>
       <div class="empty-state hidden" id="emptyState">
         <div class="ring"></div>
         <p>ยังไม่ได้ตั้งค่าวันเกิด<br>เริ่มต้นที่แท็บ “ตั้งค่า” ด้านล่าง</p>
@@ -43,15 +45,16 @@
       </div>
     </div>
   </div>
+  </div>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="goals">เป้าหมาย</button>
+    <button class="tab-btn" data-tab="goals">เป้าหมาย</button>
     <button class="tab-btn" data-tab="settings">ตั้งค่า</button>
   </nav>
 
-  <section class="panel" id="panel-goals">
+  <section class="panel hidden" id="panel-goals">
     <h2>เป้าหมายในชีวิต</h2>
-    <p class="hint">ปักหมุดสิ่งที่อยากทำ สถานที่อยากไป หรือเป้าหมายที่อยากถึง ณ อายุใดอายุหนึ่ง จะไปโผล่เป็นจุดเล็กๆ บนหน้าปัด</p>
+    <p class="hint">ปักหมุดสิ่งที่อยากทำ ณ อายุใดอายุหนึ่ง จะโผล่เป็นป้ายตัวเลขเล็กๆ บนวงแหวน — ชี้เมาส์หรือแตะที่ป้ายเพื่อดูรายละเอียดเต็ม</p>
 
     <form class="goal-form" id="goalForm">
       <div class="field-row">

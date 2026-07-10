@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>นาฬิกาชีวิต — Life Clock</title>
+<meta name="description" content="นาฬิกาชีวิตแบบอะนาล็อก-ดิจิทัล นับถอยหลังสู่อายุขัยและเป้าหมายในชีวิตของคุณ">
+<meta name="theme-color" content="#17150f">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="app-header">
+    <h1>นาฬิกาชีวิต</h1>
+    <p>LIFE CLOCK · เข็มสั้น = ทศวรรษ · เข็มกลาง = ปี · เข็มยาว = เดือน</p>
+  </header>
+
+  <div class="dial-card">
+    <div class="dial-wrap">
+      <canvas id="dial" aria-label="นาฬิกาชีวิต แสดงอายุปัจจุบันและเวลาที่เหลือ"></canvas>
+      <div class="empty-state hidden" id="emptyState">
+        <div class="ring"></div>
+        <p>ยังไม่ได้ตั้งค่าวันเกิด<br>เริ่มต้นที่แท็บ “ตั้งค่า” ด้านล่าง</p>
+      </div>
+    </div>
+
+    <div class="readout" id="readout">
+      <div class="row">
+        <span class="label">อายุปัจจุบัน</span>
+        <span class="value" id="ageValue">—</span>
+      </div>
+      <div class="row remaining">
+        <span class="label">เหลืออีก</span>
+        <span class="value" id="remainingValue">—</span>
+      </div>
+      <div class="row pct">
+        <span class="label">ผ่านไปแล้ว</span>
+        <span class="value" id="pctValue">—</span>
+      </div>
+    </div>
+  </div>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="goals">เป้าหมาย</button>
+    <button class="tab-btn" data-tab="settings">ตั้งค่า</button>
+  </nav>
+
+  <section class="panel" id="panel-goals">
+    <h2>เป้าหมายในชีวิต</h2>
+    <p class="hint">ปักหมุดสิ่งที่อยากทำ สถานที่อยากไป หรือเป้าหมายที่อยากถึง ณ อายุใดอายุหนึ่ง จะไปโผล่เป็นจุดเล็กๆ บนหน้าปัด</p>
+
+    <form class="goal-form" id="goalForm">
+      <div class="field-row">
+        <div class="field">
+          <label for="goalYears">อายุ (ปี)</label>
+          <input type="number" id="goalYears" min="0" max="120" placeholder="45" required>
+        </div>
+        <div class="field" style="max-width:90px">
+          <label for="goalMonths">เดือน</label>
+          <input type="number" id="goalMonths" min="0" max="11" placeholder="0">
+        </div>
+      </div>
+      <div class="field">
+        <label for="goalText">เป้าหมาย / สิ่งที่อยากทำ</label>
+        <input type="text" id="goalText" maxlength="80" placeholder="เช่น พาครอบครัวไปเที่ยวญี่ปุ่น" required>
+      </div>
+      <button type="submit" class="btn btn-primary">+ เพิ่มเป้าหมาย</button>
+    </form>
+
+    <ul class="goal-list" id="goalList"></ul>
+  </section>
+
+  <section class="panel hidden" id="panel-settings">
+    <h2>ตั้งค่า</h2>
+    <p class="hint">ข้อมูลนี้ถูกเก็บไว้ในเครื่องของคุณเท่านั้น ไม่ถูกส่งออกไปที่ใด</p>
+
+    <div class="field">
+      <label for="birthDateInput">วันเกิด</label>
+      <input type="date" id="birthDateInput">
+    </div>
+    <div class="field">
+      <label for="lifespanInput">คาดว่าจะมีชีวิตอยู่ถึงอายุ (ปี)</label>
+      <input type="number" id="lifespanInput" min="1" max="120" value="80">
+    </div>
+    <button class="btn btn-primary" id="saveSettingsBtn">บันทึกการตั้งค่า</button>
+    <div class="save-msg" id="saveMsg">บันทึกแล้ว</div>
+  </section>
+
+  <footer class="note">ออกแบบมาให้เตือนใจอย่างสงบ ไม่ใช่ให้วิตกกังวล — เวลาที่เหลือคือเวลาที่ยังใช้ได้</footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

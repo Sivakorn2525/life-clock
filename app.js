@@ -16,18 +16,18 @@
   };
 
   const RASI_RANGES = [
-    { start: [1, 14], name: 'มังกร', symbol: '♑' },
-    { start: [2, 13], name: 'กุมภ์', symbol: '♒' },
-    { start: [3, 14], name: 'มีน', symbol: '♓' },
-    { start: [4, 13], name: 'เมษ', symbol: '♈' },
-    { start: [5, 14], name: 'พฤษภ', symbol: '♉' },
-    { start: [6, 14], name: 'เมถุน', symbol: '♊' },
-    { start: [7, 16], name: 'กรกฎ', symbol: '♋' },
-    { start: [8, 17], name: 'สิงห์', symbol: '♌' },
-    { start: [9, 17], name: 'กันย์', symbol: '♍' },
-    { start: [10, 17], name: 'ตุลย์', symbol: '♎' },
-    { start: [11, 16], name: 'พิจิก', symbol: '♏' },
-    { start: [12, 16], name: 'ธนู', symbol: '♐' }
+    { start: [1, 14], name: 'มังกร', emoji: '🐐' },
+    { start: [2, 13], name: 'กุมภ์', emoji: '🏺' },
+    { start: [3, 14], name: 'มีน', emoji: '🐟' },
+    { start: [4, 13], name: 'เมษ', emoji: '🐏' },
+    { start: [5, 14], name: 'พฤษภ', emoji: '🐂' },
+    { start: [6, 14], name: 'เมถุน', emoji: '👯' },
+    { start: [7, 16], name: 'กรกฎ', emoji: '🦀' },
+    { start: [8, 17], name: 'สิงห์', emoji: '🦁' },
+    { start: [9, 17], name: 'กันย์', emoji: '🌾' },
+    { start: [10, 17], name: 'ตุลย์', emoji: '⚖️' },
+    { start: [11, 16], name: 'พิจิก', emoji: '🦂' },
+    { start: [12, 16], name: 'ธนู', emoji: '🏹' }
   ];
 
   function getRasi(birthDate) {
@@ -311,17 +311,16 @@
       });
     });
 
-    // ราศี symbol riding the tip of the second hand
+    // ราศี emoji riding the tip of the second hand
     const rasi = getRasi(birthDate);
-    const rasiFontSize = clamp(Math.round(R * 0.19), 16, 23);
+    const rasiFontSize = clamp(Math.round(R * 0.16), 14, 20);
     const secondHand = hands.find((h) => h.key === 'second');
     const zx = cx + Math.cos(secondHand.angle) * secondHand.len;
     const zy = cy + Math.sin(secondHand.angle) * secondHand.len;
-    ctx.font = `700 ${rasiFontSize}px sans-serif`;
+    ctx.font = `${rasiFontSize}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = coral;
-    ctx.fillText(rasi.symbol, zx, zy);
+    ctx.fillText(rasi.emoji, zx, zy);
     lastZodiacPoint = { x: zx, y: zy, r: rasiFontSize * 0.65, label: `ราศี: ${rasi.name}` };
 
     ctx.beginPath();
